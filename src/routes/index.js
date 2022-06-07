@@ -3,17 +3,17 @@ const { Router } = require('express');
 const router = Router();
 const puppeteer = require('puppeteer');
 const path = require('path');
+const fs = require('fs');
+const csvToJson = require('csvtojson');
 
-router.get('/', (req, res) => {
-    res.json({message: 'Hello World!!'})
-});
+const retailerToParse = 'blibli';
+const retailerDownloadFolder = path.resolve(__dirname, '../../data/' + retailerToParse);
 
 // Configuración del navegador y opciones de Hatch
 const urlToParse = "https://my.gethatch.com";
 const hatchEmail = process.env.HATCH_EMAIL;
 const hatchPassword = process.env.HATCH_PASSWORD;
 
-const downloadPath = path.resolve(__dirname, '../../data');
 const browserOptions = { 
     executablePath: '/usr/bin/google-chrome', // comentar esta línea en local
     headless: true, // true en docker / false en local
@@ -31,7 +31,11 @@ const pageOptions = {
     timeout: 0
 }
 
-router.get('/all', (req, res) => {
+router.get('/', (req, res) => {
+    res.json({message: 'Hello World!!'})
+});
+
+router.get('/parseRetailer', (req, res) => {
     console.log("Comienza la búsqueda de la data");
     (async () => {
         const browser = await puppeteer.launch(browserOptions);
@@ -46,14 +50,14 @@ router.get('/all', (req, res) => {
         // Selecciona el retailer
         await page.waitForSelector("#mui-12");
         await page.click("#mui-12");
-        await page.type("#mui-12", "currys");
+        await page.type("#mui-12", retailerToParse);
         await page.focus("#mui-12");
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('Enter');
         // Establezco la ubicación de la carpeta donde se va a descargar el archivo
         await page._client.send('Page.setDownloadBehavior', {
             behavior: 'allow',
-            downloadPath: downloadPath 
+            downloadPath: retailerDownloadFolder 
         });
         // Click en el boton de descargar
         await page.evaluate(() => {
@@ -72,8 +76,55 @@ router.get('/all', (req, res) => {
     })()
     .catch(err => console.error(err));
 
-    res.json({message: 'Hello All!!'})
+    res.json({message: 'The information is being analyzed!'})
 });
 
+router.get('/getPriority', (req, res) => {
+
+    let responseMessage = 'The priority was reported on the server!';
+    
+    if (!fs.existsSync(retailerDownloadFolder)) {
+        fs.mkdir(retailerDownloadFolder, (err) => {
+            if (err) console.log(err.message);
+        });
+    }
+    
+    const files = fs.readdirSync(retailerDownloadFolder);
+    
+    if (files.length > 0) {
+        for (const file of files) {
+            getPriority(file);
+        }
+    } else {
+        responseMessage = 'You must first obtain the data, visit /parseRetailer';
+    }
+        
+    res.json({message: responseMessage});
+});
+
+const getPriority = (file) => {
+     csvToJson({ delimiter: '\t'}).fromFile(path.join(retailerDownloadFolder, file)).then((json) => {
+        // Obtengo un array con todos los mpn
+        let jsonMpn = json.map(function(data) {
+            return data.MPN;
+        });
+    
+        // Averiguo la cantidad de veces que aparece cada uno
+        let numberOfOccurrences = {};
+        jsonMpn.forEach(function(mpn){
+            numberOfOccurrences[mpn] = (numberOfOccurrences[mpn] || 0) + 1;
+        });
+    
+        // Devuelvo la prioridad ordenada por la cantidad de veces que aparecen
+        let sortedMpn = Object.keys(numberOfOccurrences).sort(function(a,b){return numberOfOccurrences[b]-numberOfOccurrences[a]});
+        let mpnPriority = {};
+    
+        for (const key in sortedMpn) {
+            mpnPriority[sortedMpn[key]] = parseInt(key) + 1;
+        }
+    
+        console.log(mpnPriority);
+    });
+}
 
 module.exports = router;
