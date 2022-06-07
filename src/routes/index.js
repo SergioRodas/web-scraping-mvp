@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const csvToJson = require('csvtojson');
 
-const retailerToParse = 'blibli';
+const retailerToParse = 'currys';
 const retailerDownloadFolder = path.resolve(__dirname, '../../data/' + retailerToParse);
 
 // Configuración del navegador y opciones de Hatch
@@ -59,6 +59,8 @@ router.get('/parseRetailer', (req, res) => {
             behavior: 'allow',
             downloadPath: retailerDownloadFolder 
         });
+        // Acá falta el click en la opción de tiempo
+
         // Click en el boton de descargar
         await page.evaluate(() => {
             let saveButton = document.querySelectorAll('.MuiIconButton-sizeLarge'); 
